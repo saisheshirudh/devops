@@ -1,0 +1,57 @@
+name: Deploy to Kubernetes
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: 
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  TF_STATE_BUCKET_NAME: ${{ secrets.GCP_TF_STATE_BUCKET_NAME }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      IMAGE_TAG: ${{ github.sha }}
+
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - id: 'auth'
+        uses: google-github-actions/auth@v1
+        with:
+          token_format: 'access_token'
+          workload_identity_provider: 'projects/427478658659/locations/global/workloadIdentityPools/k8s-pool/providers/k8s-provider'
+          service_account: cicd-sa@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v1
+
+      - name: Docker auth
+        run: gcloud auth configure-docker us.gcr.io
+
+      - name: Build and Push Docker image
+        run: |
+          docker build -t us.gcr.io/${{ env.GCP_PROJECT_ID }}/nodeapp:${{ env.IMAGE_TAG }} .
+          docker push us.gcr.io/${{ env.GCP_PROJECT_ID }}/nodeapp:${{ env.IMAGE_TAG }}
+        working-directory: ./nodeapp
+
+      - uses: hashicorp/setup-terraform@v2
+
+      - name: Terraform Init
+        run: terraform init -backend-config="bucket=${{ env.TF_STATE_BUCKET_NAME }}" -backend-config="prefix=k8s"
+        working-directory: ./terraform
+
+      - name: Terraform Plan
+        run: terraform plan -var="project_id=${{ env.GCP_PROJECT_ID }}" -var="region=us-central1" -var="container_image=us.gcr.io/${{ env.GCP_PROJECT_ID }}/nodeapp:${{ env.IMAGE_TAG }}" -out=PLAN
+        working-directory: ./terraform
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve PLAN
+        working-directory: ./terraform
