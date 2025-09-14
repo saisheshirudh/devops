@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch: # allows manual trigger too
+  workflow_dispatch: 
 
 env:
   GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
@@ -29,7 +29,7 @@ jobs:
         with:
           token_format: 'access_token'
           workload_identity_provider: 'projects/427478658659/locations/global/workloadIdentityPools/k8s-pool/providers/k8s-provider'
-          service_account: cicd-sa@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+          service_account: "cicd-sa@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
 
       - uses: google-github-actions/setup-gcloud@v1
 
